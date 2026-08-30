@@ -1,81 +1,77 @@
 import streamlit as st
-from PIL import Image, ImageOps
-import numpy as np
+from PIL import Image, ImageOps, ImageDraw
 import io
 
-st.set_page_config(page_title="Gerador de Foto de Perfil - Maria Cristina", layout="centered")
+st.set_page_config(page_title="Gerador de Foto - Maria Cristina", layout="centered")
 
-def processar_e_mesclar(foto_usuario, imagem_moldura):
+def gerar_foto_circulo_interno(foto_usuario, imagem_moldura):
     """
-    Torna o fundo branco da parte superior da moldura transparente 
-    e coloca a foto do usuário perfeitamente atrás dela, sem cobrir o nome.
+    Recorta a foto do usuário em formato circular e a encaixa milimetricamente
+    dentro do círculo verde da moldura oficial.
     """
-    # 1. Converter moldura para RGBA (para aceitar transparência)
+    # 1. Carregar a moldura original em alta qualidade
     moldura = imagem_moldura.convert("RGBA")
-    largura, altura = moldura.size
+    largura_m, altura_m = moldura.size
     
-    # 2. Transformar o fundo branco da parte de cima em transparente
-    data = np.array(moldura)
-    r, g, b, a = data[:,:,0], data[:,:,1], data[:,:,2], data[:,:,3]
+    # 2. Definir o tamanho e a posição exata do círculo verde na imagem (Base 1024x1024)
+    # Ajustado de forma milimétrica para cobrir o céu azul e a nuvem interna
+    largura_alvo = int(largura_m * 0.72)  # ~737 pixels de diâmetro
+    altura_alvo = int(altura_m * 0.72)
     
-    # Identifica pixels brancos ou quase brancos
-    pixels_brancos = (r > 240) & (g > 240) & (b > 240)
+    # Posição centralizada para encaixar dentro da borda verde
+    pos_x = int(largura_m * 0.14)         # Deslocamento horizontal (143 pixels)
+    pos_y = int(altura_m * 0.11)         # Deslocamento vertical (112 pixels)
+
+    # 3. Redimensionar e cortar a foto do usuário para o tamanho do quadrado do círculo
+    foto_ajustada = ImageOps.fit(foto_usuario.convert("RGBA"), (largura_alvo, altura_alvo), Image.Resampling.LANCZOS)
     
-    # Aplicar a transparência APENAS na metade superior da imagem (onde fica a cabeça)
-    # Isso garante que o fundo das letras brancas e detalhes de baixo não sumam
-    limite_altura = int(altura * 0.58) 
+    # 4. Criar uma máscara circular perfeita
+    mascara_circulo = Image.new("L", (largura_alvo, altura_alvo), 0)
+    desenho = ImageDraw.Draw(mascara_circulo)
+    desenho.ellipse((0, 0, largura_alvo, altura_alvo), fill=255)
     
-    for y in range(limite_altura):
-        for x in range(largura):
-            if pixels_brancos[y, x]:
-                data[y, x, 3] = 0  # Torna o pixel totalmente transparente
-                
-    moldura_vazada = Image.fromarray(data)
+    # 5. Criar uma tela de fundo transparente idêntica ao tamanho da moldura
+    fundo_final = Image.new("RGBA", (largura_m, altura_m), (0, 0, 0, 0))
     
-    # 3. Preparar a foto do usuário para preencher o fundo de forma harmônica
-    foto_rgba = foto_usuario.convert("RGBA")
+    # 6. Colar a foto circular do usuário na posição exata do miolo verde
+    fundo_final.paste(foto_ajustada, (pos_x, pos_y), mascara_circulo)
     
-    # Corta e redimensiona a foto do usuário para encaixar no tamanho exato da moldura
-    foto_ajustada = ImageOps.fit(foto_rgba, (largura, altura), Image.Resampling.LANCZOS)
-    
-    # 4. Juntar as duas: Foto no fundo + Moldura oficial por CIMA
-    resultado = Image.new("RGBA", (largura, altura), (0, 0, 0, 0))
-    resultado.paste(foto_ajustada, (0, 0))
-    
-    # A moldura entra por cima, protegendo o nome "MARIA CRISTINA" de ser coberto
-    return Image.alpha_composite(resultado, moldura_vazada)
+    # 7. Sobrepor a moldura oficial com os textos por CIMA de tudo
+    # Como as letras e faixas estão na frente, o acabamento fica perfeito
+    return Image.alpha_composite(fundo_final, moldura)
 
 # --- INTERFACE DO SITE ---
-st.title("🎨 Gerador de Foto - Maria Cristina 2277")
-st.write("Insira sua foto para gerar seu banner de apoio oficial automaticamente!")
+st.title("🎨 Gerador de Foto Oficial - Maria Cristina 2277")
+st.write("Suba sua foto e veja a mágica acontecer dentro do círculo oficial de campanha!")
 
 try:
-    # Abre a imagem que você enviou (certifique-se de salvar a image_vBb4nL.png como moldura.png)
+    # Abre a imagem atualizada que você acabou de me enviar
+    # Certifique-se de salvar esta nova imagem como 'moldura.png' no GitHub
     moldura_base = Image.open("moldura.png")
 except FileNotFoundError:
     st.error("Erro: O arquivo 'moldura.png' não foi encontrado no seu GitHub. Verifique o nome do arquivo.")
     st.stop()
 
-# Área de upload para o eleitor/usuário subir a foto dele
+# Área para o usuário subir a foto dele
 arquivo_upload = st.file_uploader("Escolha uma foto sua (JPG, PNG ou JPEG)", type=["jpg", "jpeg", "png"])
 
 if arquivo_upload is not None:
     foto_usuario = Image.open(arquivo_upload)
     
-    with st.spinner("Estilizando sua foto com a moldura oficial..."):
-        imagem_final = processar_e_mesclar(foto_usuario, moldura_base)
+    with st.spinner("Moldando sua foto dentro do círculo oficial..."):
+        imagem_final = gerar_foto_circulo_interno(foto_usuario, moldura_base)
         
-    # Exibe o resultado harmônico na tela
-    st.image(imagem_final, caption="Sua foto gerada com sucesso!", use_container_width=True)
+    # Exibe o resultado impecável na tela do site
+    st.image(imagem_final, caption="Sua foto de perfil oficial está pronta!", use_container_width=True)
     
-    # Botão de download
+    # Botão de download seguro
     buffer = io.BytesIO()
     imagem_final.save(buffer, format="PNG")
     bytes_resultado = buffer.getvalue()
     
     st.download_button(
-        label="📥 Baixar Minha Foto Pronta",
+        label="📥 Baixar Minha Foto de Apoio",
         data=bytes_resultado,
-        file_name="apoio_maria_cristina_2277.png",
+        file_name="perfil_maria_cristina_2277.png",
         mime="image/png"
     )
